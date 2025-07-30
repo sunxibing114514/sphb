@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>纯前端视频合并</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #downloadLink {
+            display: none;
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>纯前端MP4视频合并</h1>
+        <p>请选择至少两个要合并的MP4文件。</p>
+        <input type="file" id="video-files" multiple accept="video/mp4">
+        <button id="merge-button" disabled>合并视频</button>
+        <div id="status"></div>
+        <a href="#" id="downloadLink" download="merged-video.mp4">下载合并后的视频</a>
+    </div>
+
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.2/dist/ffmpeg.min.js"></script>
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ log: true });
+
+        const videoFilesInput = document.getElementById('video-files');
+        const mergeButton = document.getElementById('merge-button');
+        const statusElement = document.getElementById('status');
+        const downloadLink = document.getElementById('downloadLink');
+
+        let selectedFiles = [];
+
+        videoFilesInput.addEventListener('change', (event) => {
+            selectedFiles = Array.from(event.target.files);
+            if (selectedFiles.length >= 2) {
+                mergeButton.disabled = false;
+            } else {
+                mergeButton.disabled = true;
+            }
+        });
+
+        mergeButton.addEventListener('click', async () => {
+            if (selectedFiles.length < 2) {
+                alert('请至少选择两个视频文件。');
+                return;
+            }
+
+            mergeButton.disabled = true;
+            statusElement.textContent = '正在加载ffmpeg-core.js...';
+
+            await ffmpeg.load();
+
+            statusElement.textContent = '正在加载视频文件...';
+            const inputPaths = [];
+            for (let i = 0; i < selectedFiles.length; i++) {
+                const fileName = `input${i}.mp4`;
+                ffmpeg.FS('writeFile', fileName, await fetchFile(selectedFiles[i]));
+                inputPaths.push(`file '${fileName}'`);
+            }
+
+            const concatFileContent = inputPaths.join('\n');
+            ffmpeg.FS('writeFile', 'concat.txt', concatFileContent);
+
+            statusElement.textContent = '正在合并视频...';
+            await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'output.mp4');
+
+            statusElement.textContent = '合并完成！';
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+
+            const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+            const videoUrl = URL.createObjectURL(videoBlob);
+
+            downloadLink.href = videoUrl;
+            downloadLink.style.display = 'block';
+            mergeButton.disabled = false;
+        });
+    </script>
+
+</body>
+</html>
