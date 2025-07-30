@@ -6,34 +6,53 @@
     <title>纯前端视频合并</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 20px;
             background-color: #f4f4f9;
             color: #333;
+            line-height: 1.6;
         }
-        h1 {
+        h1, h2 {
             text-align: center;
         }
         .container {
             max-width: 600px;
             margin: auto;
             background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .upload-box {
+            border: 2px dashed #ccc;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .upload-box label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 10px;
         }
         input[type="file"] {
-            display: block;
-            margin-bottom: 20px;
+            display: inline-block;
+        }
+        .button-container {
+            text-align: center;
         }
         button {
-            background-color: #4CAF50;
+            background-color: #007bff;
             color: white;
-            padding: 10px 15px;
+            padding: 12px 20px;
             border: none;
-            border-radius: 4px;
+            border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #0056b3;
         }
         button:disabled {
             background-color: #cccccc;
@@ -42,12 +61,24 @@
         #status {
             margin-top: 20px;
             font-weight: bold;
+            text-align: center;
+            color: #555;
         }
         #downloadLink {
             display: none;
             margin-top: 20px;
             font-size: 18px;
             font-weight: bold;
+            text-align: center;
+            background-color: #28a745;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        #downloadLink:hover {
+            background-color: #218838;
         }
     </style>
 </head>
@@ -55,9 +86,22 @@
 
     <div class="container">
         <h1>纯前端MP4视频合并</h1>
-        <p>请选择至少两个要合并的MP4文件。</p>
-        <input type="file" id="video-files" multiple accept="video/mp4">
-        <button id="merge-button" disabled>合并视频</button>
+        <p style="text-align: center;">请在下方两个窗口中分别上传一个MP4文件进行合并。</p>
+
+        <div class="upload-box">
+            <label for="video-file-1">视频文件 1</label>
+            <input type="file" id="video-file-1" accept="video/mp4">
+        </div>
+
+        <div class="upload-box">
+            <label for="video-file-2">视频文件 2</label>
+            <input type="file" id="video-file-2" accept="video/mp4">
+        </div>
+
+        <div class="button-container">
+            <button id="merge-button" disabled>合并视频</button>
+        </div>
+
         <div id="status"></div>
         <a href="#" id="downloadLink" download="merged-video.mp4">下载合并后的视频</a>
     </div>
@@ -67,45 +111,55 @@
         const { createFFmpeg, fetchFile } = FFmpeg;
         const ffmpeg = createFFmpeg({ log: true });
 
-        const videoFilesInput = document.getElementById('video-files');
+        const videoFile1Input = document.getElementById('video-file-1');
+        const videoFile2Input = document.getElementById('video-file-2');
         const mergeButton = document.getElementById('merge-button');
         const statusElement = document.getElementById('status');
         const downloadLink = document.getElementById('downloadLink');
 
-        let selectedFiles = [];
-
-        videoFilesInput.addEventListener('change', (event) => {
-            selectedFiles = Array.from(event.target.files);
-            if (selectedFiles.length >= 2) {
+        const checkFiles = () => {
+            // 只有当两个输入框都选择了文件时，按钮才可用
+            if (videoFile1Input.files.length > 0 && videoFile2Input.files.length > 0) {
                 mergeButton.disabled = false;
             } else {
                 mergeButton.disabled = true;
             }
-        });
+        };
+
+        // 为两个输入框都添加事件监听
+        videoFile1Input.addEventListener('change', checkFiles);
+        videoFile2Input.addEventListener('change', checkFiles);
 
         mergeButton.addEventListener('click', async () => {
-            if (selectedFiles.length < 2) {
-                alert('请至少选择两个视频文件。');
+            // 再次检查确认
+            if (videoFile1Input.files.length === 0 || videoFile2Input.files.length === 0) {
+                alert('请确保两个视频文件都已选择。');
                 return;
             }
 
             mergeButton.disabled = true;
+            downloadLink.style.display = 'none'; // 重置下载链接
             statusElement.textContent = '正在加载ffmpeg-core.js...';
 
-            await ffmpeg.load();
+            if (!ffmpeg.isLoaded()) {
+                await ffmpeg.load();
+            }
 
             statusElement.textContent = '正在加载视频文件...';
+
+            const filesToProcess = [videoFile1Input.files[0], videoFile2Input.files[0]];
             const inputPaths = [];
-            for (let i = 0; i < selectedFiles.length; i++) {
+
+            for (let i = 0; i < filesToProcess.length; i++) {
                 const fileName = `input${i}.mp4`;
-                ffmpeg.FS('writeFile', fileName, await fetchFile(selectedFiles[i]));
+                ffmpeg.FS('writeFile', fileName, await fetchFile(filesToProcess[i]));
                 inputPaths.push(`file '${fileName}'`);
             }
 
             const concatFileContent = inputPaths.join('\n');
             ffmpeg.FS('writeFile', 'concat.txt', concatFileContent);
 
-            statusElement.textContent = '正在合并视频...';
+            statusElement.textContent = '正在合并视频... 请在控制台查看详细进度。';
             await ffmpeg.run('-f', 'concat', '-safe', '0', '-i', 'concat.txt', '-c', 'copy', 'output.mp4');
 
             statusElement.textContent = '合并完成！';
